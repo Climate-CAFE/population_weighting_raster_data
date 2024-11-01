@@ -29,7 +29,7 @@ if (packageVersion("terra") < "1.5.34"   | packageVersion("sf") < "1.0.7" |
 # %%%%%%%%%%%%%%%%%%%%%%% USER-DEFINED PARAMETERS %%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
 census_api_key("")    # Obtain an API key here: https://www.census.gov/data/developers.html
-                      # NOTE: You should NOT save your API key within your code
+# NOTE: You should NOT save your API key within your code
 
 input_data_dir <- "In_Dir/"   # Full pathway of the directory where your input data will be stored.
                               # ** If you change this, be sure to keep the final forward slash **
@@ -79,7 +79,7 @@ options(timeout=1000) # Set the max timeout (in seconds) for downloading files
 # the PRISM FTP. For the purpose of this tutorial, we are just using "tmax".
 # Other options available: c("ppt", "tdmean", "tmean", "tmin", "vpdmax", "vpdmin")
 #
-vars <- c("tmax")
+vars <- c("tmax", "tmin")
 
 # The baseline URL for the PRISM FTP directory for daily data. Note that
 # other time steps are available as well. Explore the FTP site to find the
@@ -182,21 +182,11 @@ expected_days <- format(seq(as.Date(paste0(year, "-01-01")),
                             as.Date(paste0(year, "-12-31")), by = "days"), format = "%Y%m%d")
 file_days <- substr(sapply(strsplit(prism_files, "_4kmD2_"), "[", 2), 1, 8)
 
-if (length(prism_files) != length(expected_days)) {
+if (length(prism_files) != length(expected_days) * length(vars)) {
   cat("ERROR: wrong number of files for", year, "(check the pattern syntax above) \n") } else { 
     if (length(which( !(expected_days %in%  file_days) )) > 0) {
       cat("ERROR: right number of files, but missing days (check duplicates) \n")
     } else { cat(":) all files are present \n") } }
-
-# Stack all of the daily files by year
-#
-prism_files <- paste0(input_data_dir, prism_files)
-prism_stack <- rast(prism_files)
-
-# Automated QC check -- confirm all days are present
-#
-if (dim(prism_stack)[3] != length(expected_days)) { 
-  cat("ERROR: missing days in raster stack \n") } else { cat(":) all days present in raster stack \n") }
 
 #
 # %%%%%%%%%%% STEP 2B. CREATE A FISHNET GRID OF THE RASTER EXTENT %%%%%%%%%%%% #
@@ -206,7 +196,8 @@ if (dim(prism_stack)[3] != length(expected_days)) {
 #
 # Reference/credit: https://gis.stackexchange.com/a/243585
 #
-prism_raster <- prism_stack[[1]]
+prism_files <- paste0(input_data_dir, prism_files)
+prism_raster <- rast(prism_files[1])
 prism_extent <- ext(prism_raster)
 xmin <- prism_extent[1]
 xmax <- prism_extent[2]
@@ -463,6 +454,8 @@ extraction_pts <- terra::vect(extraction_pts)
 # The PRISM data are organized as separate rasters by variable, so we need to loop
 # through each of the raster stacks. (In this example, we are only looking at Tmax.)
 #
+# Create a list to hold the output files by variable
+#
 
 for (i in 1:length(vars)) {
   
@@ -470,6 +463,15 @@ for (i in 1:length(vars)) {
   cat("Processing", vars[i], "\n")
   
   newvarname <- paste0(vars[i], "_C") # For naming the applicable column in the output data
+  
+  # Stack all of the daily files by year
+  #
+  prism_stack <- rast(prism_files[grep(vars[i], prism_files)])
+  
+  # Automated QC check -- confirm all days are present
+  #
+  if (dim(prism_stack)[3] != length(expected_days)) { 
+    cat("ERROR: missing days in raster stack \n") } else { cat(":) all days present in raster stack \n") }
   
   prismpts <- terra::extract(prism_stack, extraction_pts)
   prismpts <- as_tibble(prismpts)
@@ -552,6 +554,14 @@ for (i in 1:length(vars)) {
       cat("ERROR: GEOID mismatch \n"); break
     }
   }
+  
+  if (i == 1) { final_output <- final; next }
+  if (all.equal(final_output[[GEOID]], final[[GEOID]]) &
+      all.equal(final_output[["PRISM_Date"]], final[["PRISM_Date"]])) {
+    final_output <- cbind(final_output, final[[newvarname]])
+    names(final_output)[length(final_output)] <- newvarname
+  } else { cat("ERROR: GEOID and/or Date do not match between variables! \n"); break }
+  
 }
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -678,6 +688,7 @@ for (j in 1:length(censusgeos)) {
     
     if (all.equal(final[[subgeoid[j]]], final_wt[[subgeoid[j]]])) {
       final <- cbind(final, final_wt[[varnames[i]]])
+      names(final)[length(final)] <- varnames[i]
     } else { cat("ERROR: GEOID mismatch \n") }
     
   } # end of variable loop

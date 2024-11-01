@@ -76,7 +76,7 @@ year <- 2020          # For the purpose of this tutorial, we are calculating onl
 options(timeout=1000) # Set the max timeout (in seconds) for downloading files
 
 # Identify the PRISM variables that you want to download using the syntax from
-# the PRISM FTP. For the purpose of this tutorial, we are just using "tmax".
+# the PRISM FTP. For the purpose of this tutorial, we are just using "tmax" and "tmin".
 # Other options available: c("ppt", "tdmean", "tmean", "tmin", "vpdmax", "vpdmin")
 #
 vars <- c("tmax", "tmin")
@@ -452,9 +452,7 @@ extraction_pts <- terra::vect(extraction_pts)
 # underlying each portion of a census block across the entire raster stack of values.
 #
 # The PRISM data are organized as separate rasters by variable, so we need to loop
-# through each of the raster stacks. (In this example, we are only looking at Tmax.)
-#
-# Create a list to hold the output files by variable
+# through each of the raster stacks. 
 #
 
 for (i in 1:length(vars)) {
@@ -483,7 +481,7 @@ for (i in 1:length(vars)) {
   prismpts <- pivot_longer(prismpts, cols = all_of(dates), names_to = "PRISM_Date")
   names(prismpts)[which(names(prismpts) == "value")] <- newvarname
   
-  # Before we calculate the final weighted average of Tmax, we need to check for missing data.
+  # Before we calculate the final weighted average of Tmax and Tmin, we need to check for missing data.
   # If a value is NA on one of the polygons, then it will give an underestimate of the
   # temperature since the weights will no longer add to 1. Example: there are two
   # polygons, each with 50% area. If Tmax is 30 C in one and NA in the other, then
